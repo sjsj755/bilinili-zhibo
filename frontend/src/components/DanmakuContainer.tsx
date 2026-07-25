@@ -90,7 +90,7 @@ export const DanmakuContainer: React.FC<DanmakuContainerProps> = ({
               {historyCount > 0 && danmakuList.length > historyCount && (
                 <div className="flex items-center gap-4 my-3">
                   <div className="flex-1 h-px bg-gray-300" />
-                  <span className="text-xs text-gray-400 px-2">实时采集开始</span>
+                  <span className="text-xs text-gray-400 px-2">历史弹幕结束</span>
                   <div className="flex-1 h-px bg-gray-300" />
                 </div>
               )}
