@@ -1,0 +1,18 @@
+# 环境配置（含敏感信息，不提交）
+.env
+frontend/.env
+
+# TRAE 开发工具配置
+.trae/
+
+# Python
+__pycache__/
+*.pyc
+
+# 测试缓存
+.pytest_cache/
+
+# 数据库
+data/*.db
+data/*.db-wal
+data/*.db-shm

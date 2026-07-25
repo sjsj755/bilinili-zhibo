@@ -1,0 +1,84 @@
+"""danmu_records 表查询函数"""
+
+from typing import Optional
+
+from shared.types import DanmuRecord
+from ..database import getConnection
+from ..schema import (
+    SELECT_DANMU_BY_ROOM,
+    SELECT_DANMU_BY_SESSION,
+    SELECT_DANMU_COUNT,
+    SELECT_DANMU_STATS,
+    SELECT_DANMU_PEAK_HOUR,
+)
+
+
+def _rowToDanmu(row) -> dict:
+    return {
+        "room_id": row[1],
+        "session_id": row[2],
+        "uid": row[3],
+        "username": row[4] or "",
+        "content": row[5] or "",
+        "timestamp": row[6],
+        "medal_level": row[7],
+        "medal_name": row[8] or "",
+        "user_level": row[9],
+        "is_gift": bool(row[10]),
+    }
+
+
+def getDanmuByRoomId(roomId: int, offset: int = 0, limit: int = 50) -> list[dict]:
+    conn = getConnection()
+    cursor = conn.execute(SELECT_DANMU_BY_ROOM, (roomId, limit, offset))
+    rows = cursor.fetchall()
+    return [_rowToDanmu(row) for row in rows]
+
+
+def getDanmuCount(roomId: int) -> int:
+    conn = getConnection()
+    cursor = conn.execute(SELECT_DANMU_COUNT, (roomId,))
+    row = cursor.fetchone()
+    return row[0] if row else 0
+
+
+def getDanmuBySessionId(sessionId: int) -> list[dict]:
+    """根据会话 ID 获取该会话的所有弹幕
+
+    Args:
+        sessionId: 会话 ID
+
+    Returns:
+        list[dict]: 弹幕列表，按时间戳正序排列
+    """
+    conn = getConnection()
+    cursor = conn.execute(SELECT_DANMU_BY_SESSION, (sessionId,))
+    rows = cursor.fetchall()
+    return [_rowToDanmu(row) for row in rows]
+
+
+def getDanmuStats(roomId: int) -> Optional[dict]:
+    conn = getConnection()
+    
+    cursor = conn.execute(SELECT_DANMU_STATS, (roomId,))
+    statsRow = cursor.fetchone()
+    
+    if not statsRow or statsRow[0] == 0:
+        return None
+    
+    totalCount, uniqueUsers, minTime, maxTime = statsRow
+    
+    cursor = conn.execute(SELECT_DANMU_PEAK_HOUR, (roomId,))
+    peakRow = cursor.fetchone()
+    
+    peakHour = peakRow[0] if peakRow else ""
+    peakCount = peakRow[1] if peakRow else 0
+    
+    return {
+        "total_count": totalCount,
+        "unique_users": uniqueUsers,
+        "peak_hour": peakHour,
+        "peak_count": peakCount,
+        "min_time": minTime,
+        "max_time": maxTime,
+    }
