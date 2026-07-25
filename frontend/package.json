@@ -15,6 +15,7 @@
     "axios": "^1.18.1",
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.6",
+    "echarts-wordcloud": "^2.1.0",
     "lucide-react": "^1.24.0",
     "postcss": "^8.5.16",
     "react": "^19.1.0",

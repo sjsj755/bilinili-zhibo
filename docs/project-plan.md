@@ -85,7 +85,7 @@ P0 基础采集          P1 实时展示          P2 实时分析          P3 �
 
 ---
 
-### 3.2 P1 — 实时展示
+### 3.2 P1 — 实时展示 ✅ 已完成
 
 **目标**：搭建前后端服务框架，实现弹幕的实时 Web 展示。
 
@@ -123,18 +123,185 @@ P0 基础采集          P1 实时展示          P2 实时分析          P3 �
 | P2-3 | 滑动窗口频率统计算法 | P2 | 1d | `frequency_engine.py` | ✅ |
 | P2-4 | 关键词 Top K 增量更新算法 | P2 | 2d | `keyword_engine.py` | ✅ |
 | P2-5 | 实时分析引擎整合 `realtime_engine.py` | P2 | 1d | `RealtimeAnalyzer` 解耦整合四个引擎 | ✅ |
-| P2-6 | 分析数据 WebSocket 推送通道 | P2 | 1d | 数据推送 | 🔄 |
-| P2-7 | ECharts 集成 + 弹幕频率折线图 | P2 | 1d | FrequencyChart | 🔄 |
-| P2-8 | 情感占比饼图 | P2 | 1d | SentimentPie | 🔄 |
-| P2-9 | 关键词词云（echarts-wordcloud） | P2 | 2d | KeywordCloud | 🔄 |
-| P2-10 | 直播间详情页布局整合 | P2 | 1d | RoomDetail 页面 | 🔄 |
+| P2-6 | 分析数据 WebSocket 推送通道 | P2 | 1d | 数据推送 | ✅ |
+| P2-7 | ECharts 集成 + 弹幕频率折线图 | P2 | 1d | FrequencyChart | ✅ |
+| P2-8 | 情感占比饼图 | P2 | 1d | SentimentPieChart | ✅ |
+| P2-9 | 关键词词云（echarts-wordcloud） | P2 | 2d | KeywordCloud | ✅ |
+| P2-10 | 直播间详情页布局整合 | P2 | 1d | RoomDetail 页面重构 | ✅ |
 
-**里程碑 M2 — MVP 完成**：完整可用，能实时采集、展示和分析弹幕，具备四维分析看板。
+**里程碑 M2 — MVP 完成 ✅**：完整可用，能实时采集、展示和分析弹幕，具备四维分析看板。
 
-**技术变更说明**：
-- 分词：从计划的 nodejieba（前端）改为 Python jieba（后端），更适合实时分析场景
-- 情感分析：采用 SnowNLP 而非自建词典，支持自定义训练数据微调
-- 架构：采用注册模式实现各引擎解耦，通过 `RealtimeAnalyzer` 统一管理和聚合
+---
+
+#### 3.3.1 关键技术设计
+
+##### 后端分析引擎架构
+
+采用**注册模式**实现各分析引擎的解耦，通过 `RealtimeAnalyzer` 统一管理和聚合。
+
+```
+RealtimeAnalyzer (核心协调器)
+    │
+    ├── SegmentEngine     (分词引擎)
+    │       ├── jieba 分词
+    │       ├── 哈工大停用词表过滤
+    │       ├── 自定义词典支持
+    │       └── 100ms 节流处理
+    │
+    ├── SentimentEngine   (情感分析引擎)
+    │       ├── SnowNLP 情感打分
+    │       ├── 正面/负面/中性三分类
+    │       └── 60s 滑动窗口统计
+    │
+    ├── FrequencyEngine   (频率统计引擎)
+    │       └── 10s 滑动窗口统计
+    │
+    └── KeywordEngine     (关键词引擎)
+            ├── Top K 增量更新
+            └── 最小堆优化
+```
+
+**核心设计原则**：
+- **解耦**：各引擎独立实现，通过注册模式接入
+- **实时**：100ms 节流处理，保证实时性
+- **滑动窗口**：基于时间窗口的统计，避免数据无限增长
+
+##### 前端布局设计
+
+采用**低耦合组件架构**，实现职责分离和可复用性。
+
+```
+RoomDetail (页面容器 — 状态管理中心)
+    │
+    ├── RoomHeader        (纯展示组件)
+    │       ├── 直播间信息展示
+    │       ├── 采集控制按钮
+    │       └── 操作反馈显示
+    │
+    ├── CollapsiblePanel  (通用折叠面板)
+    │       └── HistoryCard (compact模式)
+    │
+    ├── DanmakuContainer  (容器组件)
+    │       ├── DanmakuItem (纯展示)
+    │       ├── 实时/历史弹幕区分
+    │       ├── 新弹幕提示
+    │       └── 自动滚动控制
+    │
+    └── AnalysisPanel     (容器组件)
+            ├── FrequencyChart    (频率折线图)
+            ├── SentimentPieChart (情感饼图)
+            └── KeywordCloud      (关键词词云)
+```
+
+**布局优化方案**：
+- **顶部区域**：标题栏 + 可折叠采集历史（默认收起）
+- **主区域**：左侧弹幕墙（固定高度 500px，flex-1）+ 右侧分析面板（480px）
+- **右侧面板**：1+2 布局 — 频率折线图全宽在上（180px），情感饼图和关键词词云并排在下（各 200px）
+
+**低耦合设计原则**：
+1. **单一职责**：每个组件只做一件事
+2. **接口隔离**：通过 props 和 callbacks 进行通信，不直接引用
+3. **依赖倒置**：组件依赖抽象类型，不依赖具体实现
+4. **无状态优先**：纯展示组件不维护业务状态
+
+##### 数据流设计
+
+```
+后端数据流：
+    弹幕采集 → SegmentEngine → SentimentEngine → RealtimeAnalyzer → WebSocket推送
+                          ↓                ↓
+                   FrequencyEngine    KeywordEngine
+
+前端数据流：
+    WebSocketContext → RoomDetail (状态管理) → props → 子组件
+    子组件 → callbacks → RoomDetail (事件处理)
+```
+
+---
+
+#### 3.3.2 技术变更说明
+
+| 变更项 | 原计划 | 实际方案 | 原因 |
+|--------|--------|---------|------|
+| 分词 | nodejieba（前端） | Python jieba（后端） | 更适合实时分析场景，避免前端性能问题 |
+| 情感分析 | 自建词典 | SnowNLP | 成熟模型，支持自定义训练数据微调 |
+| 架构 | 耦合式集成 | 注册模式解耦 | 通过 `RealtimeAnalyzer` 统一管理，便于扩展 |
+| 布局 | 垂直堆叠 | 左右分栏 + 1+2布局 | 提升信息密度，三个图表同屏可见 |
+
+---
+
+#### 3.3.3 实现步骤详解
+
+##### P2-1 分词引擎实现步骤
+
+1. **安装依赖**：`pip install jieba`
+2. **停用词库**：引入哈工大停用词表，过滤无意义词汇
+3. **自定义词典**：支持加载 `custom_dict.txt` 扩展领域词汇
+4. **节流处理**：100ms 批量处理，避免频繁分词调用
+5. **接口设计**：`SegmentEngine.process(danmaku_list)` 返回分词结果
+
+##### P2-2 情感分析实现步骤
+
+1. **安装依赖**：`pip install snownlp`
+2. **情感打分**：使用 SnowNLP 对每条弹幕进行情感评分（0-1）
+3. **三分类**：评分 > 0.6 正面，< 0.4 负面，其余中性
+4. **滑动窗口**：60s 时间窗口，维护正面/负面/中性计数
+5. **接口设计**：`SentimentEngine.process(danmaku_list)` 返回实时情感统计
+
+##### P2-3 频率统计实现步骤
+
+1. **滑动窗口**：10s 时间窗口，维护时间序列数据
+2. **计数更新**：每条弹幕加入时更新当前窗口计数
+3. **窗口滚动**：超过窗口范围的数据自动移除
+4. **接口设计**：`FrequencyEngine.process(danmaku_list)` 返回实时频率
+
+##### P2-4 关键词提取实现步骤
+
+1. **词频统计**：基于分词结果统计词频
+2. **Top K 算法**：使用最小堆实现 Top K 增量更新
+3. **频率计算**：计算每个关键词的频率占比
+4. **接口设计**：`KeywordEngine.process(danmaku_list)` 返回 Top K 关键词
+
+##### P2-5 实时分析引擎整合步骤
+
+1. **注册模式**：各引擎通过 `@register_engine` 装饰器注册
+2. **统一管理**：`RealtimeAnalyzer` 维护已注册引擎列表
+3. **数据聚合**：调用所有引擎处理弹幕，聚合分析结果
+4. **数据推送**：通过 WebSocket 向订阅者推送分析数据
+
+##### P2-6 WebSocket 数据推送步骤
+
+1. **消息类型扩展**：新增 `stats` 消息类型
+2. **订阅管理**：支持订阅特定房间的分析数据
+3. **线程安全**：使用 `asyncio.run_coroutine_threadsafe` 实现线程安全推送
+4. **数据格式**：`{ type: 'stats', room_id: number, data: {...} }`
+
+##### P2-7 频率折线图实现步骤
+
+1. **安装依赖**：`pnpm add echarts echarts-for-react`
+2. **组件封装**：`FrequencyChart` 组件封装 ECharts 配置
+3. **动态更新**：监听数据变化，实时更新图表
+4. **空状态处理**：无数据时显示友好提示
+
+##### P2-8 情感饼图实现步骤
+
+1. **组件封装**：`SentimentPieChart` 组件封装饼图配置
+2. **颜色编码**：正面绿色 #22c55e，负面红色 #ef4444，中性灰色 #9ca3af
+3. **交互增强**：hover 显示详细统计信息
+
+##### P2-9 关键词词云实现步骤
+
+1. **安装依赖**：`pnpm add echarts-wordcloud`
+2. **组件封装**：`KeywordCloud` 组件封装词云配置
+3. **数据限制**：只显示 Top 25 关键词，避免渲染性能问题
+4. **多彩配色**：随机分配颜色，提升视觉效果
+
+##### P2-10 布局整合步骤
+
+1. **组件拆分**：创建 `RoomHeader`、`DanmakuItem`、`DanmakuContainer`、`AnalysisPanel` 组件
+2. **布局重构**：RoomDetail 作为状态管理中心，组合各子组件
+3. **数据流优化**：通过 props 传递数据，通过 callbacks 处理事件
+4. **样式统一**：使用 TailwindCSS 统一组件样式
 
 ---
 
@@ -224,6 +391,7 @@ P0 基础采集          P1 实时展示          P2 实时分析          P3 �
 | jieba | 中文分词 | 低（纯 Python 实现，无编译依赖） |
 | SnowNLP | 中文情感分析 | 低（纯 Python 实现） |
 | ECharts | 数据可视化 | 低（成熟开源库） |
+| echarts-wordcloud | 词云可视化 | 低（成熟开源库） |
 
 ### 5.3 人力投入
 
@@ -250,6 +418,7 @@ P0 基础采集          P1 实时展示          P2 实时分析          P3 �
 | R5 | 长时间运行内存泄漏 | 中 | 中 | 🟡 中 | 环形缓冲区限制内存；定时重启采集进程；定期 heapdump 分析 |
 | R6 | 情感词典覆盖不足导致分析偏差大 | 高 | 低 | 🟢 低 | 支持自定义词典扩充；标明分析结果仅供参考；深度分析预留大模型 API 接口 |
 | R7 | 单个开发者时间不足，进度延迟 | 中 | 中 | 🟡 中 | 优先交付 P0-P2 MVP 核心功能；P3/P4 可后续迭代 |
+| R8 | echarts-wordcloud 版本兼容问题 | 低 | 低 | 🟢 低 | 锁定 echarts 和 echarts-wordcloud 版本；使用类型断言处理类型定义 |
 
 ### 6.2 应急预案
 
@@ -259,6 +428,7 @@ P0 基础采集          P1 实时展示          P2 实时分析          P3 �
 | 核心依赖不可用 | jieba → pynlpir / thulac；SnowNLP → 自建情感词典方案；websockets → aiohttp WebSocket |
 | 前端框架问题 | React 遇到阻塞 → 降级为原生 HTML + ECharts CDN 静态页面 |
 | 进度严重滞后 | 砍掉 P3 回放导入和 P4 词典管理，聚焦核心采集+分析+展示 |
+| 词云渲染失败 | 降级为关键词列表展示，保留核心功能 |
 
 ---
 
@@ -338,6 +508,7 @@ P0 基础采集          P1 实时展示          P2 实时分析          P3 �
 - [SnowNLP GitHub](https://github.com/isnowfy/snownlp)
 - [FastAPI 官方文档](https://fastapi.tiangolo.com/)
 - [ECharts 官方文档](https://echarts.apache.org/)
+- [echarts-wordcloud GitHub](https://github.com/ecomfe/echarts-wordcloud)
 
 ### 10.3 术语表
 
@@ -348,3 +519,6 @@ P0 基础采集          P1 实时展示          P2 实时分析          P3 �
 | TF-IDF | 词频-逆文档频率，关键词权重算法 |
 | 虚拟滚动 | 只渲染可视区域 DOM 节点，优化大量列表渲染性能 |
 | WAL 模式 | SQLite 的 Write-Ahead Logging，提升并发写入性能 |
+| 滑动窗口 | 基于时间的固定窗口统计方法，只保留窗口内的数据 |
+| 最小堆 | 一种数据结构，用于高效维护 Top K 元素 |
+| 注册模式 | 通过装饰器或配置注册组件，实现解耦和动态扩展 |

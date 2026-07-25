@@ -153,6 +153,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       console.log('[WebSocket] WebSocket 未连接，触发连接');
+      subscribedRoomsRef.current.add(roomId);
       connect();
     } else {
       if (!subscribedRoomsRef.current.has(roomId)) {
@@ -194,6 +195,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       console.log('[WebSocket] WebSocket 未连接，触发连接');
+      subscribedRoomsRef.current.add(roomId);
       connect();
     } else {
       if (!subscribedRoomsRef.current.has(roomId)) {

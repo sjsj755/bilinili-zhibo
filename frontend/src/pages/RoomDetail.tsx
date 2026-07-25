@@ -1,11 +1,14 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
-import { MessageSquare, Clock, User, Play, Square, Loader2, CheckCircle, XCircle, ChevronDown } from 'lucide-react';
-import { danmuApi, roomApi, sessionApi } from '@/services/api';
+import { MessageSquare } from 'lucide-react';
+import { danmuApi, sessionApi } from '@/services/api';
 import { useDanmaku } from '@/hooks/useDanmaku';
 import { HistoryCard } from '@/components/HistoryCard';
-import FrequencyChart from '@/components/FrequencyChart';
+import RoomHeader from '@/components/RoomHeader';
+import DanmakuContainer from '@/components/DanmakuContainer';
+import AnalysisPanel from '@/components/AnalysisPanel';
+import CollapsiblePanel from '@/components/CollapsiblePanel';
 import { useWebSocket } from '@/context/WebSocketContext';
-import type { Room, DanmuRecord, RealtimeStats, RealtimeFrequency } from '@/types';
+import type { Room, RealtimeStats, RealtimeFrequency, RealtimeSentiment, RealtimeKeywords } from '@/types';
 
 interface RoomDetailProps {
   room: Room | null;
@@ -23,7 +26,7 @@ export const RoomDetail = React.memo(function RoomDetail({ room }: RoomDetailPro
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const prevDanmakuCountRef = useRef(0);
-  console.log('RoomDetail rendering:', room?.room_id, room?.status);
+
   const { danmakuList, historyCount, setInitialData, clearAndStartNewSession, markAsHistory, wsStatus } = useDanmaku({
     roomId: room?.room_id || null,
     isMonitoring: room?.status === 'monitoring',
@@ -31,6 +34,8 @@ export const RoomDetail = React.memo(function RoomDetail({ room }: RoomDetailPro
 
   const { subscribeStats, unsubscribeStats } = useWebSocket();
   const [frequencyData, setFrequencyData] = useState<RealtimeFrequency[]>([]);
+  const [sentimentData, setSentimentData] = useState<RealtimeSentiment | null>(null);
+  const [keywordData, setKeywordData] = useState<RealtimeKeywords | null>(null);
   const MAX_DATA_POINTS = 60;
 
   const [loading, setLoading] = useState(false);
@@ -58,13 +63,16 @@ export const RoomDetail = React.memo(function RoomDetail({ room }: RoomDetailPro
     setFeedbackMsg('');
 
     try {
-      const response = await roomApi.startMonitor(room.room_id);
-      if (response.code === 0) {
+      const response = await fetch(`/api/rooms/${room.room_id}/monitor`, {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (data.code === 0) {
         setFeedback('success');
-        setFeedbackMsg(response.msg || '采集已启动');
+        setFeedbackMsg(data.msg || '采集已启动');
       } else {
         setFeedback('error');
-        setFeedbackMsg(response.msg || '启动失败');
+        setFeedbackMsg(data.msg || '启动失败');
       }
     } catch {
       setFeedback('error');
@@ -85,13 +93,16 @@ export const RoomDetail = React.memo(function RoomDetail({ room }: RoomDetailPro
     setFeedbackMsg('');
 
     try {
-      const response = await roomApi.stopMonitor(room.room_id);
-      if (response.code === 0) {
+      const response = await fetch(`/api/rooms/${room.room_id}/monitor/stop`, {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (data.code === 0) {
         setFeedback('success');
-        setFeedbackMsg(response.msg || '采集已停止');
+        setFeedbackMsg(data.msg || '采集已停止');
       } else {
         setFeedback('error');
-        setFeedbackMsg(response.msg || '停止失败');
+        setFeedbackMsg(data.msg || '停止失败');
       }
     } catch {
       setFeedback('error');
@@ -107,7 +118,6 @@ export const RoomDetail = React.memo(function RoomDetail({ room }: RoomDetailPro
 
   useEffect(() => {
     if (!room) return;
-    console.log('Room status changed:', room.status);
     
     if (room.status === 'monitoring') {
       clearAndStartNewSession();
@@ -145,6 +155,14 @@ export const RoomDetail = React.memo(function RoomDetail({ room }: RoomDetailPro
         }
         return newData;
       });
+
+      if (stats.sentiment) {
+        setSentimentData(stats.sentiment);
+      }
+
+      if (stats.keywords) {
+        setKeywordData(stats.keywords);
+      }
     };
 
     subscribeStats(room.room_id, handleStats);
@@ -152,6 +170,8 @@ export const RoomDetail = React.memo(function RoomDetail({ room }: RoomDetailPro
     return () => {
       unsubscribeStats(room.room_id, handleStats);
       setFrequencyData([]);
+      setSentimentData(null);
+      setKeywordData(null);
     };
   }, [room, subscribeStats, unsubscribeStats]);
 
@@ -195,42 +215,6 @@ export const RoomDetail = React.memo(function RoomDetail({ room }: RoomDetailPro
     }
   }, []);
 
-  const renderDanmakuItem = (danmaku: DanmuRecord, isHistory: boolean) => {
-    return (
-      <div
-        key={danmaku.id}
-        className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${
-          isHistory
-            ? 'bg-gray-100 opacity-70'
-            : 'bg-gray-50 hover:bg-gray-100'
-        }`}
-      >
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-          isHistory ? 'bg-gradient-to-br from-gray-300 to-gray-400' : 'bg-gradient-to-br from-blue-500 to-purple-500'
-        }`}>
-          <User className="w-4 h-4 text-white" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className={`font-medium text-sm truncate ${isHistory ? 'text-gray-500' : 'text-gray-900'}`}>
-              {danmaku.username}
-            </span>
-            <span className="text-xs flex items-center gap-1 text-gray-400">
-              <Clock className="w-3 h-3" />
-              {new Date(danmaku.timestamp * 1000).toLocaleTimeString()}
-            </span>
-            {isHistory && (
-              <span className="text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-500">历史</span>
-            )}
-          </div>
-          <p className={`text-sm break-words ${isHistory ? 'text-gray-500' : 'text-gray-700'}`}>
-            {danmaku.content}
-          </p>
-        </div>
-      </div>
-    );
-  };
-
   if (!room) {
     return (
       <div className="p-6 flex items-center justify-center h-full">
@@ -243,155 +227,38 @@ export const RoomDetail = React.memo(function RoomDetail({ room }: RoomDetailPro
   }
 
   return (
-    <div className="p-6 h-screen flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{room.room_name}</h1>
-          <p className="text-gray-500 mt-1">主播: {room.anchor_name}</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100">
-            <div className={`w-2 h-2 rounded-full ${
-              room.status === 'monitoring' ? 'bg-green-500 animate-pulse' :
-              room.status === 'error' ? 'bg-red-500' : 'bg-gray-400'
-            }`} />
-            <span className="text-sm text-gray-700">
-              {room.status === 'monitoring' ? '监控中' :
-               room.status === 'error' ? '错误' : '空闲'}
-            </span>
-          </div>
+    <div className="p-6 flex flex-col gap-4">
+      <RoomHeader
+        room={room}
+        loading={loading}
+        feedback={feedback}
+        feedbackMsg={feedbackMsg}
+        onStartMonitor={handleStartMonitor}
+        onStopMonitor={handleStopMonitor}
+      />
 
-          {room.status !== 'error' && (
-            <div className="flex items-center gap-2">
-              {room.status === 'idle' && (
-                <button
-                  onClick={handleStartMonitor}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>启动中...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4" />
-                      <span>开始采集</span>
-                    </>
-                  )}
-                </button>
-              )}
-              {room.status === 'monitoring' && (
-                <button
-                  onClick={handleStopMonitor}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>停止中...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Square className="w-4 h-4" />
-                      <span>停止采集</span>
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-          )}
+      <CollapsiblePanel title="采集历史" defaultOpen={false}>
+        <HistoryCard room={room} onSessionClick={handleSessionClick} compact />
+      </CollapsiblePanel>
 
-          {feedbackMsg && (
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-              feedback === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-            }`}>
-              {feedback === 'success' ? (
-                <CheckCircle className="w-4 h-4" />
-              ) : (
-                <XCircle className="w-4 h-4" />
-              )}
-              <span>{feedbackMsg}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="flex-1 flex gap-4">
-        <div className="flex-1 bg-white rounded-xl overflow-hidden flex flex-col border border-gray-200 shadow-sm">
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-lg font-medium text-gray-900 flex items-center gap-2">
-              <MessageSquare className="w-5 h-5" />
-              实时弹幕
-            </h2>
-            <div className="flex items-center gap-4">
-              <div className={`flex items-center gap-2 px-2 py-1 rounded-full text-xs ${
-                wsStatus === 'connected' ? 'bg-green-100 text-green-700' :
-                wsStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700' :
-                wsStatus === 'error' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
-              }`}>
-                <div className={`w-1.5 h-1.5 rounded-full ${
-                  wsStatus === 'connected' ? 'bg-green-500' :
-                  wsStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' :
-                  wsStatus === 'error' ? 'bg-red-500' : 'bg-gray-400'
-                }`} />
-                {wsStatus === 'connected' ? '已连接' :
-                 wsStatus === 'connecting' ? '连接中...' :
-                 wsStatus === 'error' ? '连接错误' : '未连接'}
-              </div>
-              <span className="text-sm text-gray-500">共 {danmakuList.length} 条</span>
-            </div>
-          </div>
-
-          <div
-            ref={scrollContainerRef}
+      <div className="flex gap-4 flex-1">
+        <div className="flex-1">
+          <DanmakuContainer
+            danmakuList={danmakuList}
+            historyCount={historyCount}
+            wsStatus={wsStatus}
+            hasNewDanmaku={hasNewDanmaku}
+            newDanmakuCount={newDanmakuCount}
             onScroll={handleScroll}
-            className="flex-1 overflow-y-auto p-4"
-          >
-            {danmakuList.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                <MessageSquare className="w-12 h-12 mb-2 opacity-50" />
-                <p>暂无弹幕数据</p>
-                <p className="text-sm mt-1">开始采集后将显示实时弹幕</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {danmakuList.slice(0, historyCount).map((danmaku) => (
-                  renderDanmakuItem(danmaku, true)
-                ))}
-
-                {historyCount > 0 && danmakuList.length > historyCount && (
-                  <div className="flex items-center gap-4 my-3">
-                    <div className="flex-1 h-px bg-gray-300" />
-                    <span className="text-xs text-gray-400 px-2">实时采集开始</span>
-                    <div className="flex-1 h-px bg-gray-300" />
-                  </div>
-                )}
-
-                {danmakuList.slice(historyCount).map((danmaku) => (
-                  renderDanmakuItem(danmaku, false)
-                ))}
-              </div>
-            )}
-
-            {hasNewDanmaku && (
-              <button
-                onClick={scrollToLatest}
-                className="fixed bottom-8 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-green-500 text-white rounded-full shadow-lg hover:bg-green-600 transition-all duration-300 flex items-center gap-2 z-50 animate-bounce"
-              >
-                <span className="font-medium">有 {newDanmakuCount} 条新弹幕</span>
-                <ChevronDown className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+            onScrollToLatest={scrollToLatest}
+          />
         </div>
 
-        <div className="w-96 flex flex-col gap-4">
-          <FrequencyChart data={frequencyData} />
-          <HistoryCard room={room} onSessionClick={handleSessionClick} />
-        </div>
+        <AnalysisPanel
+          frequencyData={frequencyData}
+          sentimentData={sentimentData}
+          keywordData={keywordData}
+        />
       </div>
     </div>
   );
