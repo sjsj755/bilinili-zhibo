@@ -142,9 +142,11 @@ async def health():
 from server.routes.room import router as roomRouter
 from server.routes.danmu import router as danmuRouter
 from server.routes.session import router as sessionRouter
+from server.routes.analysis import router as analysisRouter
 from server.ws import router as wsRouter
 
 app.include_router(roomRouter, prefix="/api/rooms", tags=["rooms"])
 app.include_router(danmuRouter, prefix="/api/danmu", tags=["danmu"])
 app.include_router(sessionRouter, prefix="/api/sessions", tags=["sessions"])
+app.include_router(analysisRouter, prefix="/api/analysis", tags=["analysis"])
 app.include_router(wsRouter, prefix="/ws", tags=["websocket"])

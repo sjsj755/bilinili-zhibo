@@ -67,7 +67,29 @@ ALTER_DANMU_ADD_SESSION_ID = """
 ALTER TABLE danmu_records ADD COLUMN session_id INTEGER DEFAULT 0;
 """
 
-# P0 阶段所有建表语句，按依赖顺序
+CREATE_ANALYSIS_TASKS_TABLE = """
+CREATE TABLE IF NOT EXISTS analysis_tasks (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id       INTEGER NOT NULL,
+    type          TEXT NOT NULL DEFAULT 'deep',
+    status        TEXT DEFAULT 'pending',
+    params        TEXT DEFAULT '',
+    result_json   TEXT DEFAULT '',
+    start_time    INTEGER,
+    end_time      INTEGER,
+    error_msg     TEXT DEFAULT '',
+    created_at    TEXT DEFAULT (datetime('now', 'localtime')),
+    completed_at  TEXT DEFAULT '',
+    FOREIGN KEY (room_id) REFERENCES rooms(room_id)
+);
+"""
+
+CREATE_ANALYSIS_TASKS_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_analysis_room
+ON analysis_tasks(room_id);
+"""
+
+# 所有建表语句，按依赖顺序
 ALL_TABLES = [
     CREATE_ROOMS_TABLE,
     CREATE_DANMU_RECORDS_TABLE,
@@ -75,6 +97,8 @@ ALL_TABLES = [
     CREATE_SESSIONS_TABLE,
     CREATE_SESSIONS_INDEX,
     CREATE_DANMU_SESSION_INDEX,
+    CREATE_ANALYSIS_TASKS_TABLE,
+    CREATE_ANALYSIS_TASKS_INDEX,
 ]
 
 # 弹幕批量插入语句
@@ -97,8 +121,10 @@ SELECT_ROOM_DANMU_COUNT = "SELECT COUNT(*) FROM danmu_records WHERE room_id = ?"
 # 弹幕表查询语句
 SELECT_DANMU_BY_ROOM = "SELECT * FROM danmu_records WHERE room_id = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?"
 SELECT_DANMU_BY_SESSION = "SELECT * FROM danmu_records WHERE session_id = ? ORDER BY timestamp ASC"
+SELECT_DANMU_BY_ROOM_AND_TIME = "SELECT * FROM danmu_records WHERE room_id = ? AND timestamp >= ? AND timestamp < ? ORDER BY timestamp ASC LIMIT ? OFFSET ?"
 SELECT_DANMU_COUNT = "SELECT COUNT(*) FROM danmu_records WHERE room_id = ?"
 SELECT_DANMU_COUNT_BY_SESSION = "SELECT COUNT(*) FROM danmu_records WHERE session_id = ?"
+SELECT_DANMU_COUNT_BY_ROOM_AND_TIME = "SELECT COUNT(*) FROM danmu_records WHERE room_id = ? AND timestamp >= ? AND timestamp < ?"
 SELECT_DANMU_STATS = """
 SELECT 
     COUNT(*) as total_count,
@@ -125,10 +151,35 @@ SELECT_SESSION_BY_ID = "SELECT * FROM sessions WHERE id = ?"
 SELECT_SESSIONS_BY_ROOM = "SELECT * FROM sessions WHERE room_id = ? ORDER BY start_time DESC"
 SELECT_ACTIVE_SESSION = "SELECT * FROM sessions WHERE room_id = ? AND status = 'active' ORDER BY start_time DESC LIMIT 1"
 UPDATE_SESSION_END = """
-UPDATE sessions 
-SET end_time = datetime('now', 'localtime'), 
+UPDATE sessions
+SET end_time = datetime('now', 'localtime'),
     danmu_count = (SELECT COUNT(*) FROM danmu_records WHERE session_id = ?),
     status = 'ended'
 WHERE id = ?
 """
 DELETE_SESSION = "DELETE FROM sessions WHERE id = ?"
+
+# 分析任务表 SQL 常量
+INSERT_ANALYSIS_TASK = """
+INSERT INTO analysis_tasks (room_id, type, status, params, start_time, end_time)
+VALUES (?, 'deep', 'pending', ?, ?, ?)
+"""
+SELECT_ANALYSIS_TASK_BY_ID = "SELECT * FROM analysis_tasks WHERE id = ?"
+SELECT_ANALYSIS_TASKS_BY_ROOM = """
+SELECT * FROM analysis_tasks WHERE room_id = ? AND type = 'deep'
+ORDER BY created_at DESC
+"""
+UPDATE_ANALYSIS_TASK_STATUS_RUNNING = """
+UPDATE analysis_tasks SET status = 'running' WHERE id = ?
+"""
+UPDATE_ANALYSIS_TASK_COMPLETED = """
+UPDATE analysis_tasks
+SET status = 'completed', result_json = ?, completed_at = datetime('now', 'localtime')
+WHERE id = ?
+"""
+UPDATE_ANALYSIS_TASK_FAILED = """
+UPDATE analysis_tasks
+SET status = 'failed', error_msg = ?, completed_at = datetime('now', 'localtime')
+WHERE id = ?
+"""
+DELETE_ANALYSIS_TASK = "DELETE FROM analysis_tasks WHERE id = ?"

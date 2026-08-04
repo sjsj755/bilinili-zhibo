@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import * as echarts from 'echarts';
-import 'echarts-wordcloud';
+import echarts from '@/utils/echarts';
 import { Tag } from 'lucide-react';
 import type { RealtimeKeywords } from '@/types';
 

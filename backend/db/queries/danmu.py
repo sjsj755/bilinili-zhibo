@@ -1,13 +1,16 @@
 """danmu_records 表查询函数"""
 
-from typing import Optional
+import asyncio
+from typing import Optional, AsyncIterator, List, Dict, Any
 
 from shared.types import DanmuRecord
 from ..database import getConnection
 from ..schema import (
     SELECT_DANMU_BY_ROOM,
     SELECT_DANMU_BY_SESSION,
+    SELECT_DANMU_BY_ROOM_AND_TIME,
     SELECT_DANMU_COUNT,
+    SELECT_DANMU_COUNT_BY_ROOM_AND_TIME,
     SELECT_DANMU_STATS,
     SELECT_DANMU_PEAK_HOUR,
 )
@@ -82,3 +85,67 @@ def getDanmuStats(roomId: int) -> Optional[dict]:
         "min_time": minTime,
         "max_time": maxTime,
     }
+
+
+def getDanmuByTimeRange(roomId: int, startTime: int, endTime: int, 
+                        limit: int = 5000, offset: int = 0) -> List[Dict[str, Any]]:
+    """获取指定房间在指定时间范围内的弹幕（支持分页）
+    
+    Args:
+        roomId: 直播间 ID
+        startTime: 起始时间戳
+        endTime: 结束时间戳
+        limit: 每页数量
+        offset: 偏移量
+        
+    Returns:
+        List[Dict]: 弹幕列表
+    """
+    conn = getConnection()
+    cursor = conn.execute(SELECT_DANMU_BY_ROOM_AND_TIME, 
+                          (roomId, startTime, endTime, limit, offset))
+    rows = cursor.fetchall()
+    return [_rowToDanmu(row) for row in rows]
+
+
+def getDanmuCountByTimeRange(roomId: int, startTime: int, endTime: int) -> int:
+    """获取指定房间在指定时间范围内的弹幕数量
+    
+    Args:
+        roomId: 直播间 ID
+        startTime: 起始时间戳
+        endTime: 结束时间戳
+        
+    Returns:
+        int: 弹幕数量
+    """
+    conn = getConnection()
+    cursor = conn.execute(SELECT_DANMU_COUNT_BY_ROOM_AND_TIME, 
+                          (roomId, startTime, endTime))
+    row = cursor.fetchone()
+    return row[0] if row else 0
+
+
+async def getDanmuChunkIterator(roomId: int, startTime: int, endTime: int, 
+                                chunkSize: int = 5000) -> AsyncIterator[List[Dict[str, Any]]]:
+    """异步迭代器，分块产出指定时间范围的弹幕（流式处理核心）
+    
+    Args:
+        roomId: 直播间 ID
+        startTime: 起始时间戳
+        endTime: 结束时间戳
+        chunkSize: 每块的弹幕数量
+        
+    Yields:
+        AsyncIterator[List[Dict]]: 一个分块的弹幕列表
+    """
+    offset = 0
+    while True:
+        # 将同步的数据库查询放到线程池中执行，避免阻塞事件循环
+        chunk = await asyncio.to_thread(
+            getDanmuByTimeRange, roomId, startTime, endTime, chunkSize, offset
+        )
+        if not chunk:
+            break
+        yield chunk
+        offset += chunkSize

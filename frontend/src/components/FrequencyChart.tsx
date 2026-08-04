@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
+import echarts from '@/utils/echarts';
 import type { RealtimeFrequency } from '@/types';
 
 interface FrequencyChartProps {
@@ -148,6 +149,7 @@ export default function FrequencyChart({ data, height = '250px' }: FrequencyChar
         </div>
       ) : (
         <ReactECharts
+          echarts={echarts}
           option={option}
           style={{ height }}
           opts={{ renderer: 'canvas' }}

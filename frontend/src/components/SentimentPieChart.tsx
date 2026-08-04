@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import * as echarts from 'echarts';
+import echarts from '@/utils/echarts';
 import { PieChart } from 'lucide-react';
 import type { RealtimeSentiment } from '@/types';
 
@@ -49,7 +49,7 @@ export const SentimentPieChart: React.FC<SentimentPieChartProps> = ({ data, heig
 
     const totalCount = data.total_count;
 
-    const option: echarts.EChartsOption = {
+    const option: echarts.EChartsCoreOption = {
       backgroundColor: 'transparent',
       tooltip: {
         trigger: 'item',

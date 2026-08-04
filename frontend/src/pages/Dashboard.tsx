@@ -15,23 +15,39 @@ export const Dashboard = React.memo(function Dashboard() {
     }
 
     const fetchStats = async () => {
-      const newStatsMap = new Map<number, DanmuStats>();
-      for (const room of rooms) {
-        try {
-          const response = await danmuApi.getStats(room.room_id);
-          if (response.code === 0 && response.data) {
-            newStatsMap.set(room.room_id, response.data);
+      const results = await Promise.all(
+        rooms.map(async (room) => {
+          try {
+            const response = await danmuApi.getStats(room.room_id);
+            if (response.code === 0 && response.data) {
+              return [room.room_id, response.data] as const;
+            }
+          } catch (e) {
+            console.error('Fetch stats failed:', e);
           }
-        } catch (e) {
-          console.error('Fetch stats failed:', e);
+          return null;
+        })
+      );
+
+      const newStatsMap = new Map<number, DanmuStats>();
+      results.forEach((result) => {
+        if (result) {
+          newStatsMap.set(result[0], result[1]);
         }
-      }
+      });
       setStatsMap(newStatsMap);
     };
 
     const timer = setTimeout(fetchStats, 1000);
     return () => clearTimeout(timer);
   }, [rooms]);
+
+  useEffect(() => {
+    if (rooms.length > 0) {
+      import('@/pages/RoomDetail');
+      import('@/pages/DeepAnalysis');
+    }
+  }, [rooms.length]);
 
   const totalDanmu = useMemo(() => {
     return rooms.reduce((sum, room) => sum + room.danmu_count, 0);
